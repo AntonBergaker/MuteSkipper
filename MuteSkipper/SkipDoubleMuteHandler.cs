@@ -12,6 +12,8 @@ public class SkipDoubleMuteService {
 
     private CurrentDeviceData? currentDeviceData;
 
+    private int pressCount;
+
     public CoreAudioDevice? CurrentDevice => currentDeviceData?.Device;
 
     public SkipDoubleMuteService() {
@@ -43,8 +45,17 @@ public class SkipDoubleMuteService {
 
             if (newValue != lastValue) {
                 if (DateTime.Now - lastSwitchTime < TimeSpan.FromMilliseconds(500)) {
-                    Console.WriteLine("Skipped!");
-                    MediaKeyManager.SendSkipCommand();
+                    pressCount++;
+
+                    if (pressCount == 1) {
+                        MediaKeyManager.SendPlayPauseCommand();
+                    }
+                    if (pressCount == 2) {
+                        MediaKeyManager.SendSkipCommand();
+                        device.ToggleMute();
+                    }
+                } else {
+                    pressCount = 0;
                 }
 
                 lastValue = newValue;
@@ -52,7 +63,7 @@ public class SkipDoubleMuteService {
             }
 
             try {
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(75, cancellationToken);
             } catch (TaskCanceledException) {
                 break;
             }

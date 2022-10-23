@@ -14,9 +14,9 @@ public class TrayContext : ApplicationContext {
         handler = new SkipDoubleMuteService();
 
         deviceStrip = new ToolStripMenuItem();
+
         deviceStrip.Text = "Select device";
         deviceStrip.DropDownItems.Add("Loading devices...");
-        _ = GetAvailableDevices();
 
         // Initialize Tray Icon
         var strip = new ContextMenuStrip();
@@ -51,9 +51,10 @@ public class TrayContext : ApplicationContext {
                 break;
             }
         }
+        PopulateDeviceList(devices);
     }
 
-    bool waitingForDevices = false;
+    private bool waitingForDevices = false;
 
     private async Task GetAvailableDevices() {
         if (waitingForDevices) {
@@ -61,7 +62,19 @@ public class TrayContext : ApplicationContext {
         }
         waitingForDevices = true;
         var devices = await handler.GetAvailableDevices();
+
         waitingForDevices = false;
+        PopulateDeviceList(devices);
+    }
+
+    private HashSet<string> previousAvailableDevices = new();
+    private void PopulateDeviceList(CoreAudioDevice[] devices) {
+        // Same devices, don't have to do anything
+        if (IsTheSameDevices(previousAvailableDevices, devices)) {
+            return;
+        }
+
+        previousAvailableDevices = devices.Select(x => x.RealId).ToHashSet();
         deviceStrip.DropDownItems.Clear();
         foreach (var device in devices) {
             var entry = new ToolStripMenuItem(device.FullName);
@@ -72,6 +85,23 @@ public class TrayContext : ApplicationContext {
             }
             deviceStrip.DropDownItems.Add(entry);
         }
+    }
+
+    /// <summary>
+    /// Checks if the devices are the same in the two sets
+    /// </summary>
+    private bool IsTheSameDevices(HashSet<string> previous, CoreAudioDevice[] newDevices) {
+        if (previous.Count != newDevices.Length) {
+            return false;
+        }
+
+        foreach (var device in newDevices) {
+            if (previous.Contains(device.RealId) == false) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void Entry_CheckedChanged(ToolStripMenuItem entry, CoreAudioDevice device) {
@@ -86,7 +116,7 @@ public class TrayContext : ApplicationContext {
             item.Checked = false;
         }
 
-        var dir = Path.GetDirectoryName(saveFilePath);
+        var dir = Path.GetDirectoryName(saveFilePath)!;
         if (Directory.Exists(dir) == false) {
             Directory.CreateDirectory(dir);
         }
