@@ -1,5 +1,4 @@
 ﻿
-using AudioSwitcher.AudioApi.CoreAudio;
 using MuteSkipper.Properties;
 
 namespace MuteSkipper;
@@ -21,7 +20,7 @@ public class TrayContext : ApplicationContext {
         // Initialize Tray Icon
         var strip = new ContextMenuStrip();
 
-        strip.MouseEnter += (_, _) => _ = GetAvailableDevices();
+        strip.MouseEnter += async (_, _) => await GetAvailableDevices();
 
         var exit = new ToolStripMenuItem();
         exit.Text = "Exit";
@@ -46,8 +45,8 @@ public class TrayContext : ApplicationContext {
     private async Task SetDeviceFromId(string deviceId) {
         var devices = await handler.GetAvailableDevices();
         foreach (var device in devices) {
-            if (device.RealId == deviceId) {
-                handler.SetDevice(device);
+            if (device.DeviceId == deviceId) {
+                await handler.SetDevice(device.DeviceId);
                 break;
             }
         }
@@ -68,21 +67,23 @@ public class TrayContext : ApplicationContext {
     }
 
     private HashSet<string> previousAvailableDevices = new();
-    private void PopulateDeviceList(CoreAudioDevice[] devices) {
+    private void PopulateDeviceList(SkipDoubleMuteService.DeviceData[] devices) {
         // Same devices, don't have to do anything
         if (IsTheSameDevices(previousAvailableDevices, devices)) {
             return;
         }
 
-        previousAvailableDevices = devices.Select(x => x.RealId).ToHashSet();
+        previousAvailableDevices = devices.Select(x => x.DeviceId).ToHashSet();
         deviceStrip.DropDownItems.Clear();
         foreach (var device in devices) {
-            var entry = new ToolStripMenuItem(device.FullName);
+            var entry = new ToolStripMenuItem(device.DeviceName);
             entry.CheckOnClick = true;
-            entry.CheckedChanged += (_, _) => Entry_CheckedChanged(entry, device);
-            if (handler.CurrentDevice?.RealId == device.RealId) {
+            entry.CheckedChanged += (_, _) => Entry_CheckedChanged(entry, device.DeviceId);
+
+            if (handler.CurrentDeviceId == device.DeviceId) {
                 entry.Checked = true;
             }
+            
             deviceStrip.DropDownItems.Add(entry);
         }
     }
@@ -90,13 +91,13 @@ public class TrayContext : ApplicationContext {
     /// <summary>
     /// Checks if the devices are the same in the two sets
     /// </summary>
-    private bool IsTheSameDevices(HashSet<string> previous, CoreAudioDevice[] newDevices) {
+    private bool IsTheSameDevices(HashSet<string> previous, SkipDoubleMuteService.DeviceData[] newDevices) {
         if (previous.Count != newDevices.Length) {
             return false;
         }
 
         foreach (var device in newDevices) {
-            if (previous.Contains(device.RealId) == false) {
+            if (previous.Contains(device.DeviceId) == false) {
                 return false;
             }
         }
@@ -104,7 +105,7 @@ public class TrayContext : ApplicationContext {
         return true;
     }
 
-    private void Entry_CheckedChanged(ToolStripMenuItem entry, CoreAudioDevice device) {
+    private void Entry_CheckedChanged(ToolStripMenuItem entry, string deviceId) {
         if (entry.Checked == false) {
             return;
         }
@@ -120,8 +121,8 @@ public class TrayContext : ApplicationContext {
         if (Directory.Exists(dir) == false) {
             Directory.CreateDirectory(dir);
         }
-        File.WriteAllText(saveFilePath, device.RealId);
-        handler.SetDevice(device);
+        File.WriteAllText(saveFilePath, deviceId);
+        _ = handler.SetDevice(deviceId);
     }
 
     private void Exit(object? sender, EventArgs e) {
